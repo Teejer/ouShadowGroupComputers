@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
-    [string]$CsvPath = (Join-Path $PSScriptRoot 'ous.csv'),
+    [string]$CsvPath,
     [string]$GroupName,
-    [string]$StatePath = (Join-Path $PSScriptRoot 'state.json'),
+    [string]$StatePath,
     [string]$LogPath = 'Add-ComputersToGroup.log',
     [string]$AddLogPath = 'added-computers.log',
     [string]$ErrorLogPath = 'add-errors.log',
@@ -14,7 +14,25 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$libsPath = Join-Path $PSScriptRoot 'libs'
+# $PSScriptRoot is empty when the script is dot-sourced or piped into the
+# shell (e.g. iwr | iex, or some schedulers), so fall back to the command
+# path and finally to the current directory.
+$scriptRoot = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($PSCommandPath) {
+    Split-Path -Path $PSCommandPath -Parent
+} else {
+    (Get-Location).ProviderPath
+}
+
+if (-not $CsvPath) {
+    $CsvPath = Join-Path -Path $scriptRoot -ChildPath 'ous.csv'
+}
+if (-not $StatePath) {
+    $StatePath = Join-Path -Path $scriptRoot -ChildPath 'state.json'
+}
+
+$libsPath = Join-Path $scriptRoot 'libs'
 . (Join-Path $libsPath 'Write-Log.ps1')
 . (Join-Path $libsPath 'Get-OuListFromCsv.ps1')
 . (Join-Path $libsPath 'Get-ScriptState.ps1')
@@ -31,7 +49,7 @@ $libsPath = Join-Path $PSScriptRoot 'libs'
 . (Join-Path $libsPath 'Add-NextComputer.ps1')
 
 foreach ($logVar in @('LogPath', 'AddLogPath', 'ErrorLogPath')) {
-    Set-Variable -Name $logVar -Value (Resolve-LogPath -Path (Get-Variable -Name $logVar -ValueOnly) -Root $PSScriptRoot)
+    Set-Variable -Name $logVar -Value (Resolve-LogPath -Path (Get-Variable -Name $logVar -ValueOnly) -Root $scriptRoot)
 }
 
 Import-Module ActiveDirectory
