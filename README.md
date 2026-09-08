@@ -24,11 +24,14 @@ caught early with minimal blast radius.
 ## Usage
 
 ```powershell
-# Daily run (e.g. from Windows Task Scheduler)
+# Daily run (e.g. from Windows Task Scheduler), groups come from the CSV
+.\Add-ComputersToGroup.ps1
+
+# Send every OU to one group regardless of the CSV column
 .\Add-ComputersToGroup.ps1 -GroupName "Deny-Login"
 
 # Start the whole rollout over from the first OU
-.\Add-ComputersToGroup.ps1 -GroupName "Deny-Login" -ResetState
+.\Add-ComputersToGroup.ps1 -ResetState
 ```
 
 Requires the ActiveDirectory (RSAT) PowerShell module and must run on a
@@ -37,24 +40,27 @@ group's membership.
 
 ## OU list (ous.csv)
 
-One OU per row, in the exact order they should be rolled out. The first
-column is used. OU distinguished names only:
+One row per OU, in the exact order they should be rolled out. The first
+column is the OU distinguished name, the second column is the security
+group that this OU's computers will be added to:
 
 ```csv
-Ou
-"OU=Laptops,DC=contoso,DC=com"
-"OU=Desktops,DC=contoso,DC=com"
-"OU=Workstations,OU=Engineering,DC=contoso,DC=com"
+Ou,Group
+"OU=Laptops,DC=contoso,DC=com","Deny-Login-Laptops"
+"OU=Desktops,DC=contoso,DC=com","Deny-Login-Desktops"
+"OU=Workstations,OU=Engineering,DC=contoso,DC=com","Deny-Login-Engineering"
 ```
 
 The script always works through the list from top to bottom: an OU is only
-touched once every computer in the OUs above it has been handled.
+touched once every computer in the OUs above it has been handled. If a
+row's group cannot be resolved, that row is skipped with an error logged
+and the rollout continues with the next row.
 
 ## Parameters
 
 | Parameter        | Default                        | Description                                        |
 | ---------------- | ------------------------------ | -------------------------------------------------- |
-| `-GroupName`     | (required)                     | Target security group.                             |
+| `-GroupName`     | (none)                         | Override: send every OU to this group instead of the group column in the CSV. |
 | `-CsvPath`       | `.\ous.csv`                    | Ordered list of OUs.                               |
 | `-BatchSize`     | `5`                            | Computers added per run.                           |
 | `-SortBy`        | `Name`                         | Property used to order computers within an OU.     |
@@ -86,17 +92,22 @@ daily batch.
 
 ```
 Add-ComputersToGroup.ps1      Main script (entry point / orchestration)
-ous.csv                       Ordered OU list (edit for your environment)
+ous.csv                       Ordered OU + target group list (edit for your environment)
 libs/
-  Get-OuListFromCsv.ps1       Reads and validates the OU list
+  Get-OuListFromCsv.ps1       Reads and validates the OU/group list
   Get-ScriptState.ps1         Loads progress from state.json
   Save-ScriptState.ps1        Persists progress to state.json
+  Reset-ScriptState.ps1       Deletes the progress file
   Get-NextComputers.ps1       Ordered, not-yet-processed computers in an OU
+  Resolve-TargetGroup.ps1     Looks up a group, logs on failure
   Add-ComputerToGroup.ps1     Membership check + add for one computer
+  Add-NextComputer.ps1        Add/log one candidate computer, updates state sets
+  ConvertTo-DnsSet.ps1        Builds a deduplicating set of DNs
   Write-Log.ps1               General timestamped logging
   Write-AddLog.ps1            Per-add CSV log
   Write-ErrorLog.ps1          Per-failure CSV log
   Get-DatedLogPath.ps1        Appends _yyyy_MM to log file names
+  Resolve-LogPath.ps1         Makes log paths absolute and dated
 ```
 
 ## Scheduling
@@ -104,7 +115,7 @@ libs/
 Create a scheduled task that runs once a day, for example:
 
 ```
-powershell.exe -ExecutionPolicy Bypass -File C:\Scripts\computerGroupRollout\Add-ComputersToGroup.ps1 -GroupName Deny-Login
+powershell.exe -ExecutionPolicy Bypass -File C:\Scripts\computerGroupRollout\Add-ComputersToGroup.ps1
 ```
 
 Runs become no-ops once every OU in the list has been completed.

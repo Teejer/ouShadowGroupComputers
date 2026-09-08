@@ -3,7 +3,7 @@ function Add-ComputerToGroup {
     param(
         [Parameter(Mandatory)]$Computer,
         [Parameter(Mandatory)][string]$GroupDn,
-        [Parameter(Mandatory)][System.Collections.Generic.HashSet[string]]$MemberDns
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MemberDns
     )
 
     $computerDn = $Computer.DistinguishedName
