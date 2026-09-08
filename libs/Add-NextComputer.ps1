@@ -9,9 +9,7 @@ function Add-NextComputer {
         [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$FailedDistinguishedNames,
         [Parameter(Mandatory)][string]$AddLogPath,
         [Parameter(Mandatory)][string]$ErrorLogPath,
-        [string]$LogPath,
-        [int]$AddedSoFar = 0,
-        [int]$BatchSize = 1
+        [string]$LogPath
     )
 
     $computerDistinguishedName = $Computer.DistinguishedName
@@ -21,7 +19,6 @@ function Add-NextComputer {
         [void]$ProcessedDistinguishedNames.Add($computerDistinguishedName)
         if ($result -eq 'Added') {
             Write-AddLog -Path $AddLogPath -Computer $Computer -GroupName $Group.Name -GroupDistinguishedName $GroupDistinguishedName
-            Write-Log -Message "Added $computerDistinguishedName ($($AddedSoFar + 1)/$BatchSize)" -LogPath $LogPath
             return 'Added'
         }
 

@@ -109,7 +109,7 @@ while ($added -lt $BatchSize -and $state.CurrentOuIndex -lt $entries.Count) {
     }
 
     $computer = $candidates[0]
-    $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDistinguishedName $groupDistinguishedName -MemberDistinguishedNames $memberDistinguishedNames -ProcessedDistinguishedNames $processedDistinguishedNames -FailedDistinguishedNames $failedDistinguishedNames -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath -AddedSoFar $added -BatchSize $BatchSize
+    $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDistinguishedName $groupDistinguishedName -MemberDistinguishedNames $memberDistinguishedNames -ProcessedDistinguishedNames $processedDistinguishedNames -FailedDistinguishedNames $failedDistinguishedNames -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath
     if ($outcome -eq 'Added') {
         $added++
     }
