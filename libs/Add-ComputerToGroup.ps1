@@ -2,18 +2,18 @@ function Add-ComputerToGroup {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Computer,
-        [Parameter(Mandatory)][string]$GroupDn,
-        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MemberDns
+        [Parameter(Mandatory)][string]$GroupDistinguishedName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MemberDistinguishedNames
     )
 
-    $computerDn = $Computer.DistinguishedName
+    $computerDistinguishedName = $Computer.DistinguishedName
 
-    if ($MemberDns.Contains($computerDn)) {
+    if ($MemberDistinguishedNames.Contains($computerDistinguishedName)) {
         return 'AlreadyMember'
     }
 
-    Add-ADGroupMember -Identity $GroupDn -Members $computerDn -ErrorAction Stop
-    [void]$MemberDns.Add($computerDn)
+    Add-ADGroupMember -Identity $GroupDistinguishedName -Members $computerDistinguishedName -ErrorAction Stop
+    [void]$MemberDistinguishedNames.Add($computerDistinguishedName)
 
     return 'Added'
 }

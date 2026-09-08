@@ -3,10 +3,10 @@ function Add-NextComputer {
     param(
         [Parameter(Mandatory)]$Computer,
         [Parameter(Mandatory)]$Group,
-        [Parameter(Mandatory)][string]$GroupDn,
-        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MemberDns,
-        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$ProcessedDns,
-        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$FailedDns,
+        [Parameter(Mandatory)][string]$GroupDistinguishedName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MemberDistinguishedNames,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$ProcessedDistinguishedNames,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$FailedDistinguishedNames,
         [Parameter(Mandatory)][string]$AddLogPath,
         [Parameter(Mandatory)][string]$ErrorLogPath,
         [string]$LogPath,
@@ -14,23 +14,23 @@ function Add-NextComputer {
         [int]$BatchSize = 1
     )
 
-    $computerDn = $Computer.DistinguishedName
+    $computerDistinguishedName = $Computer.DistinguishedName
 
     try {
-        $result = Add-ComputerToGroup -Computer $Computer -GroupDn $GroupDn -MemberDns $MemberDns
-        [void]$ProcessedDns.Add($computerDn)
+        $result = Add-ComputerToGroup -Computer $Computer -GroupDistinguishedName $GroupDistinguishedName -MemberDistinguishedNames $MemberDistinguishedNames
+        [void]$ProcessedDistinguishedNames.Add($computerDistinguishedName)
         if ($result -eq 'Added') {
-            Write-AddLog -Path $AddLogPath -Computer $Computer -GroupName $Group.Name -GroupDn $GroupDn
-            Write-Log -Message "Added $computerDn ($($AddedSoFar + 1)/$BatchSize)" -LogPath $LogPath
+            Write-AddLog -Path $AddLogPath -Computer $Computer -GroupName $Group.Name -GroupDistinguishedName $GroupDistinguishedName
+            Write-Log -Message "Added $computerDistinguishedName ($($AddedSoFar + 1)/$BatchSize)" -LogPath $LogPath
             return 'Added'
         }
 
-        Write-Log -Message "Already a member, skipping without counting toward batch: $computerDn" -LogPath $LogPath
+        Write-Log -Message "Already a member, skipping without counting toward batch: $computerDistinguishedName" -LogPath $LogPath
         return 'AlreadyMember'
     } catch {
-        [void]$FailedDns.Add($computerDn)
-        Write-ErrorLog -Path $ErrorLogPath -Computer $Computer -GroupName $Group.Name -GroupDn $GroupDn -ErrorRecord $_
-        Write-Log -Message "Failed to add $computerDn : $($_.Exception.Message)" -Level ERROR -LogPath $LogPath
+        [void]$FailedDistinguishedNames.Add($computerDistinguishedName)
+        Write-ErrorLog -Path $ErrorLogPath -Computer $Computer -GroupName $Group.Name -GroupDistinguishedName $GroupDistinguishedName -ErrorRecord $_
+        Write-Log -Message "Failed to add $computerDistinguishedName : $($_.Exception.Message)" -Level ERROR -LogPath $LogPath
         return 'Failed'
     }
 }

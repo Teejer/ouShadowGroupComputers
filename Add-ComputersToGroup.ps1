@@ -14,42 +14,28 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# $PSScriptRoot is empty when the script is dot-sourced or piped into the
-# shell (e.g. iwr | iex, or some schedulers), so fall back to the command
-# path and finally to the current directory.
-$scriptRoot = if ($PSScriptRoot) {
-    $PSScriptRoot
-} elseif ($PSCommandPath) {
-    Split-Path -Path $PSCommandPath -Parent
+# Capture the entry script's directory once, here at the top level, because
+# inside dot-sourced functions $PSScriptRoot and $MyInvocation resolve to the
+# lib file itself instead of the entry script. Falls back to the current
+# directory when the script is piped in (e.g. iwr | iex).
+$entryPath = $MyInvocation.MyCommand.Path
+$scriptPath = if ($entryPath) {
+    Split-Path -Parent $entryPath
 } else {
     (Get-Location).ProviderPath
 }
 
+. (Join-Path $scriptPath 'libs/Import-Libs.ps1') -ScriptRoot $scriptPath
+
 if (-not $CsvPath) {
-    $CsvPath = Join-Path -Path $scriptRoot -ChildPath 'ous.csv'
+    $CsvPath = Join-Path -Path $scriptPath -ChildPath 'ous.csv'
 }
 if (-not $StatePath) {
-    $StatePath = Join-Path -Path $scriptRoot -ChildPath 'state.json'
+    $StatePath = Join-Path -Path $scriptPath -ChildPath 'state.json'
 }
 
-$libsPath = Join-Path $scriptRoot 'libs'
-. (Join-Path $libsPath 'Write-Log.ps1')
-. (Join-Path $libsPath 'Get-OuListFromCsv.ps1')
-. (Join-Path $libsPath 'Get-ScriptState.ps1')
-. (Join-Path $libsPath 'Save-ScriptState.ps1')
-. (Join-Path $libsPath 'Get-NextComputers.ps1')
-. (Join-Path $libsPath 'Add-ComputerToGroup.ps1')
-. (Join-Path $libsPath 'Write-AddLog.ps1')
-. (Join-Path $libsPath 'Write-ErrorLog.ps1')
-. (Join-Path $libsPath 'Get-DatedLogPath.ps1')
-. (Join-Path $libsPath 'Resolve-LogPath.ps1')
-. (Join-Path $libsPath 'ConvertTo-DnsSet.ps1')
-. (Join-Path $libsPath 'Reset-ScriptState.ps1')
-. (Join-Path $libsPath 'Resolve-TargetGroup.ps1')
-. (Join-Path $libsPath 'Add-NextComputer.ps1')
-
 foreach ($logVar in @('LogPath', 'AddLogPath', 'ErrorLogPath')) {
-    Set-Variable -Name $logVar -Value (Resolve-LogPath -Path (Get-Variable -Name $logVar -ValueOnly) -Root $scriptRoot)
+    Set-Variable -Name $logVar -Value (Resolve-LogPath -Path (Get-Variable -Name $logVar -ValueOnly) -Root $scriptPath)
 }
 
 Import-Module ActiveDirectory
@@ -79,16 +65,16 @@ if ($state.CurrentOuIndex -ge $entries.Count) {
 }
 
 $groupCache = @{}
-$memberDnsCache = @{}
-$processedDns = ConvertTo-DnsSet -Dns @($state.ProcessedDns)
-$failedDns = ConvertTo-DnsSet -Dns @($state.FailedDns)
+$memberDistinguishedNamesCache = @{}
+$processedDistinguishedNames = ConvertTo-DistinguishedNameSet -DistinguishedNames @($state.ProcessedDistinguishedNames)
+$failedDistinguishedNames = ConvertTo-DistinguishedNameSet -DistinguishedNames @($state.FailedDistinguishedNames)
 
 $added = 0
 $loggedEntry = ''
 
 while ($added -lt $BatchSize -and $state.CurrentOuIndex -lt $entries.Count) {
     $entry = $entries[$state.CurrentOuIndex]
-    $entryLabel = "$($entry.OuDn) -> $($entry.GroupName)"
+    $entryLabel = "$($entry.OuDistinguishedName) -> $($entry.GroupName)"
 
     if ($loggedEntry -ne $entryLabel) {
         Write-Log -Message "Processing $entryLabel" -LogPath $LogPath
@@ -99,37 +85,37 @@ while ($added -lt $BatchSize -and $state.CurrentOuIndex -lt $entries.Count) {
         $resolved = Resolve-TargetGroup -GroupName $entry.GroupName -LogPath $LogPath
         $groupCache[$entry.GroupName] = $resolved
         if ($resolved) {
-            $memberDnsCache[$resolved.DistinguishedName] = ConvertTo-DnsSet -Dns @($resolved.Member)
+            $memberDistinguishedNamesCache[$resolved.DistinguishedName] = ConvertTo-DistinguishedNameSet -DistinguishedNames @($resolved.Member)
         }
     }
 
     $group = $groupCache[$entry.GroupName]
     if (-not $group) {
-        Write-Log -Message "Skipping OU '$($entry.OuDn)': group '$($entry.GroupName)' could not be resolved." -Level ERROR -LogPath $LogPath
+        Write-Log -Message "Skipping OU '$($entry.OuDistinguishedName)': group '$($entry.GroupName)' could not be resolved." -Level ERROR -LogPath $LogPath
         $state.CurrentOuIndex++
         continue
     }
 
-    $groupDn = $group.DistinguishedName
-    $memberDns = $memberDnsCache[$groupDn]
+    $groupDistinguishedName = $group.DistinguishedName
+    $memberDistinguishedNames = $memberDistinguishedNamesCache[$groupDistinguishedName]
 
-    $excludeDns = @($processedDns) + @($failedDns)
-    $candidates = @(Get-NextComputers -OuDn $entry.OuDn -SortBy $SortBy -ExcludeDns $excludeDns -IncludeSubOus:$IncludeSubOus)
+    $excludeDistinguishedNames = @($processedDistinguishedNames) + @($failedDistinguishedNames)
+    $candidates = @(Get-NextComputers -OuDistinguishedName $entry.OuDistinguishedName -SortBy $SortBy -ExcludeDistinguishedNames $excludeDistinguishedNames -IncludeSubOus:$IncludeSubOus)
 
     if ($candidates.Count -eq 0) {
-        Write-Log -Message "Finished OU '$($entry.OuDn)'. Moving to next OU." -LogPath $LogPath
+        Write-Log -Message "Finished OU '$($entry.OuDistinguishedName)'. Moving to next OU." -LogPath $LogPath
         $state.CurrentOuIndex++
         continue
     }
 
     $computer = $candidates[0]
-    $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDn $groupDn -MemberDns $memberDns -ProcessedDns $processedDns -FailedDns $failedDns -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath -AddedSoFar $added -BatchSize $BatchSize
+    $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDistinguishedName $groupDistinguishedName -MemberDistinguishedNames $memberDistinguishedNames -ProcessedDistinguishedNames $processedDistinguishedNames -FailedDistinguishedNames $failedDistinguishedNames -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath -AddedSoFar $added -BatchSize $BatchSize
     if ($outcome -eq 'Added') {
         $added++
     }
 }
 
-Save-ScriptState -Path $StatePath -CurrentOuIndex $state.CurrentOuIndex -ProcessedDns @($processedDns) -FailedDns @($failedDns)
+Save-ScriptState -Path $StatePath -CurrentOuIndex $state.CurrentOuIndex -ProcessedDistinguishedNames @($processedDistinguishedNames) -FailedDistinguishedNames @($failedDistinguishedNames)
 
 Write-Log -Message "Run finished. Added $added computer(s). OU progress: index $($state.CurrentOuIndex) of $($entries.Count)." -LogPath $LogPath
 

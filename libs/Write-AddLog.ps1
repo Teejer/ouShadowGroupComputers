@@ -4,15 +4,15 @@ function Write-AddLog {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)]$Computer,
         [Parameter(Mandatory)][string]$GroupName,
-        [Parameter(Mandatory)][string]$GroupDn
+        [Parameter(Mandatory)][string]$GroupDistinguishedName
     )
 
     $record = [pscustomobject]@{
         TimeStamp    = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
         GroupName    = $GroupName
-        GroupDn      = $GroupDn
+        GroupDistinguishedName      = $GroupDistinguishedName
         ComputerName = $Computer.Name
-        ComputerDn   = $Computer.DistinguishedName
+        ComputerDistinguishedName   = $Computer.DistinguishedName
     }
 
     if (Test-Path -Path $Path) {

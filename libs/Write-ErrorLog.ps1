@@ -4,7 +4,7 @@ function Write-ErrorLog {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)]$Computer,
         [Parameter(Mandatory)][string]$GroupName,
-        [Parameter(Mandatory)][string]$GroupDn,
+        [Parameter(Mandatory)][string]$GroupDistinguishedName,
         [Parameter(Mandatory)]$ErrorRecord
     )
 
@@ -14,9 +14,9 @@ function Write-ErrorLog {
     $record = [pscustomobject]@{
         TimeStamp    = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
         GroupName    = $GroupName
-        GroupDn      = $GroupDn
+        GroupDistinguishedName      = $GroupDistinguishedName
         ComputerName = $Computer.Name
-        ComputerDn   = $Computer.DistinguishedName
+        ComputerDistinguishedName   = $Computer.DistinguishedName
         ErrorMessage = $ErrorRecord.Exception.Message
         ErrorId      = $ErrorRecord.FullyQualifiedErrorId
         ErrorAt      = $location

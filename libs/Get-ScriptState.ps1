@@ -9,8 +9,8 @@ function Get-ScriptState {
             $saved = Get-Content -Path $Path -Raw | ConvertFrom-Json
             return [pscustomobject]@{
                 CurrentOuIndex = [int]$saved.CurrentOuIndex
-                ProcessedDns   = @($saved.ProcessedDns)
-                FailedDns      = @($saved.FailedDns)
+                ProcessedDistinguishedNames   = @($saved.ProcessedDistinguishedNames)
+                FailedDistinguishedNames      = @($saved.FailedDistinguishedNames)
             }
         } catch {
             throw "State file '$Path' exists but could not be read as JSON: $($_.Exception.Message)"
@@ -19,7 +19,7 @@ function Get-ScriptState {
 
     return [pscustomobject]@{
         CurrentOuIndex = 0
-        ProcessedDns   = @()
-        FailedDns      = @()
+        ProcessedDistinguishedNames   = @()
+        FailedDistinguishedNames      = @()
     }
 }

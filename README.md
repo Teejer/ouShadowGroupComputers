@@ -81,8 +81,9 @@ Log file names get a monthly stamp appended automatically, e.g.
   computer accounts so each daily run knows where it left off. Failed
   computers are recorded and skipped on later runs so they never block the
   rollout.
-- `added-computers_yyyy_MM.log` — CSV: timestamp, group name, group DN,
-  computer name, computer DN, for every computer added.
+- `added-computers_yyyy_MM.log` — CSV: timestamp, group name, group
+  distinguished name, computer name, computer distinguished name, for every
+  computer added.
 - `add-errors_yyyy_MM.log` — CSV: same fields plus error message, error id,
   and script location for every failure.
 
@@ -95,6 +96,7 @@ daily batch.
 Add-ComputersToGroup.ps1      Main script (entry point / orchestration)
 ous.example.csv               Ordered OU + target group list template (copy to ous.csv)
 libs/
+  Import-Libs.ps1             Loads all lib files in one place
   Get-OuListFromCsv.ps1       Reads and validates the OU/group list
   Get-ScriptState.ps1         Loads progress from state.json
   Save-ScriptState.ps1        Persists progress to state.json
@@ -103,7 +105,8 @@ libs/
   Resolve-TargetGroup.ps1     Looks up a group, logs on failure
   Add-ComputerToGroup.ps1     Membership check + add for one computer
   Add-NextComputer.ps1        Add/log one candidate computer, updates state sets
-  ConvertTo-DnsSet.ps1        Builds a deduplicating set of DNs
+  ConvertTo-DistinguishedNameSet.ps1
+                              Builds a deduplicating set of distinguished names
   Write-Log.ps1               General timestamped logging
   Write-AddLog.ps1            Per-add CSV log
   Write-ErrorLog.ps1          Per-failure CSV log

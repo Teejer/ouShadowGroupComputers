@@ -33,7 +33,7 @@ function Get-OuListFromCsv {
             throw "Row for OU '$ou' in $Path has no target group."
         }
         [pscustomobject]@{
-            OuDn      = $ou
+            OuDistinguishedName      = $ou
             GroupName = $group
         }
     }
