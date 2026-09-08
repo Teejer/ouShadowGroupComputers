@@ -40,9 +40,10 @@ group's membership.
 
 ## OU list (ous.csv)
 
-One row per OU, in the exact order they should be rolled out. The first
-column is the OU distinguished name, the second column is the security
-group that this OU's computers will be added to:
+Copy `ous.example.csv` to `ous.csv` (the default `-CsvPath`) and edit it
+for your environment. One row per OU, in the exact order they should be
+rolled out. The first column is the OU distinguished name, the second
+column is the security group that this OU's computers will be added to:
 
 ```csv
 Ou,Group
@@ -92,7 +93,7 @@ daily batch.
 
 ```
 Add-ComputersToGroup.ps1      Main script (entry point / orchestration)
-ous.csv                       Ordered OU + target group list (edit for your environment)
+ous.example.csv               Ordered OU + target group list template (copy to ous.csv)
 libs/
   Get-OuListFromCsv.ps1       Reads and validates the OU/group list
   Get-ScriptState.ps1         Loads progress from state.json
