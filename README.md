@@ -1,4 +1,4 @@
-# Computer Group Rollout
+# OU Shadow Group Computers
 
 PowerShell tooling to roll out a GPO change gradually by adding computer
 accounts from a list of OUs to a security group in small batches, one batch
@@ -116,7 +116,7 @@ libs/
 Create a scheduled task that runs once a day, for example:
 
 ```
-powershell.exe -ExecutionPolicy Bypass -File C:\Scripts\computerGroupRollout\Add-ComputersToGroup.ps1
+powershell.exe -ExecutionPolicy Bypass -File C:\Scripts\ouShadowGroupComputers\Add-ComputersToGroup.ps1
 ```
 
 Runs become no-ops once every OU in the list has been completed.
