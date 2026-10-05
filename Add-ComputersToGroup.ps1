@@ -2,14 +2,12 @@
 param(
     [string]$CsvPath,
     [string]$GroupName,
-    [string]$StatePath,
     [string]$LogPath = 'Add-ComputersToGroup.log',
     [string]$AddLogPath = 'added-computers.log',
     [string]$ErrorLogPath = 'add-errors.log',
     [ValidateRange(1, 100)][int]$BatchSize = 5,
     [string]$SortBy = 'Name',
-    [switch]$IncludeSubOus,
-    [switch]$ResetState
+    [switch]$IncludeSubOus
 )
 
 $ErrorActionPreference = 'Stop'
@@ -30,19 +28,12 @@ $scriptPath = if ($entryPath) {
 if (-not $CsvPath) {
     $CsvPath = Join-Path -Path $scriptPath -ChildPath 'ous.csv'
 }
-if (-not $StatePath) {
-    $StatePath = Join-Path -Path $scriptPath -ChildPath 'state.json'
-}
 
 foreach ($logVar in @('LogPath', 'AddLogPath', 'ErrorLogPath')) {
     Set-Variable -Name $logVar -Value (Resolve-LogPath -Path (Get-Variable -Name $logVar -ValueOnly) -Root $scriptPath)
 }
 
 Import-Module ActiveDirectory
-
-if ($ResetState) {
-    Reset-ScriptState -StatePath $StatePath -LogPath $LogPath
-}
 
 Write-Log -Message '=== Run started ===' -LogPath $LogPath
 
@@ -57,29 +48,31 @@ if ($GroupName) {
     Write-Log -Message "Loaded $($entries.Count) OU/group pair(s) from $CsvPath" -LogPath $LogPath
 }
 
-$state = Get-ScriptState -Path $StatePath
-
-if ($state.CurrentOuIndex -ge $entries.Count) {
-    Write-Log -Message 'All OUs in the list are complete. Use -ResetState to start over.' -LogPath $LogPath
-    exit 0
-}
-
+# No state file: progress is derived from Active Directory itself at runtime.
+# For each OU/group pair the pending work is simply the diff
+#   computers in the OU  -  current members of the group
+# so re-running after edits to the CSV (new OUs anywhere in the list) just
+# works, and already-added computers are recognized by their membership.
 $groupCache = @{}
 $memberDistinguishedNamesCache = @{}
-$processedDistinguishedNames = ConvertTo-DistinguishedNameSet -DistinguishedNames @($state.ProcessedDistinguishedNames)
-$failedDistinguishedNames = ConvertTo-DistinguishedNameSet -DistinguishedNames @($state.FailedDistinguishedNames)
+
+# Computers that failed to be added during this run. Excluded from later
+# candidates in the same run so one bad computer cannot starve its OU; they
+# are retried on the next run.
+$failedThisRun = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
 $added = 0
-$loggedEntry = ''
+$stoppedEarly = $false
 
-while ($added -lt $BatchSize -and $state.CurrentOuIndex -lt $entries.Count) {
-    $entry = $entries[$state.CurrentOuIndex]
-    $entryLabel = "$($entry.OuDistinguishedName) -> $($entry.GroupName)"
-
-    if ($loggedEntry -ne $entryLabel) {
-        Write-Log -Message "Processing $entryLabel" -LogPath $LogPath
-        $loggedEntry = $entryLabel
+foreach ($entry in $entries) {
+    if ($added -ge $BatchSize) {
+        $stoppedEarly = $true
+        Write-Log -Message "Batch size of $BatchSize reached. Remaining OUs will be picked up on the next run." -LogPath $LogPath
+        break
     }
+
+    $entryLabel = "$($entry.OuDistinguishedName) -> $($entry.GroupName)"
+    Write-Log -Message "Processing $entryLabel" -LogPath $LogPath
 
     if (-not $groupCache.ContainsKey($entry.GroupName)) {
         $resolved = Resolve-TargetGroup -GroupName $entry.GroupName -LogPath $LogPath
@@ -92,33 +85,37 @@ while ($added -lt $BatchSize -and $state.CurrentOuIndex -lt $entries.Count) {
     $group = $groupCache[$entry.GroupName]
     if (-not $group) {
         Write-Log -Message "Skipping OU '$($entry.OuDistinguishedName)': group '$($entry.GroupName)' could not be resolved." -Level ERROR -LogPath $LogPath
-        $state.CurrentOuIndex++
         continue
     }
 
     $groupDistinguishedName = $group.DistinguishedName
     $memberDistinguishedNames = $memberDistinguishedNamesCache[$groupDistinguishedName]
 
-    $excludeDistinguishedNames = @($processedDistinguishedNames) + @($failedDistinguishedNames)
+    # The diff: computers in this OU that are not yet members of the group
+    # (and did not already fail during this run).
+    $excludeDistinguishedNames = @($memberDistinguishedNames) + @($failedThisRun)
     $candidates = @(Get-NextComputers -OuDistinguishedName $entry.OuDistinguishedName -SortBy $SortBy -ExcludeDistinguishedNames $excludeDistinguishedNames -IncludeSubOus:$IncludeSubOus)
 
     if ($candidates.Count -eq 0) {
-        Write-Log -Message "Finished OU '$($entry.OuDistinguishedName)'. Moving to next OU." -LogPath $LogPath
-        $state.CurrentOuIndex++
+        Write-Log -Message "Nothing to add for $entryLabel : every computer in the OU is already a member." -LogPath $LogPath
         continue
     }
 
-    $computer = $candidates[0]
-    $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDistinguishedName $groupDistinguishedName -MemberDistinguishedNames $memberDistinguishedNames -ProcessedDistinguishedNames $processedDistinguishedNames -FailedDistinguishedNames $failedDistinguishedNames -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath
-    if ($outcome -eq 'Added') {
-        $added++
+    Write-Log -Message "$($candidates.Count) computer(s) in '$($entry.OuDistinguishedName)' are not yet members of '$($entry.GroupName)'." -LogPath $LogPath
+
+    foreach ($computer in $candidates) {
+        if ($added -ge $BatchSize) {
+            break
+        }
+        $outcome = Add-NextComputer -Computer $computer -Group $group -GroupDistinguishedName $groupDistinguishedName -MemberDistinguishedNames $memberDistinguishedNames -FailedDistinguishedNames $failedThisRun -AddLogPath $AddLogPath -ErrorLogPath $ErrorLogPath -LogPath $LogPath
+        if ($outcome -eq 'Added') {
+            $added++
+        }
     }
 }
 
-Save-ScriptState -Path $StatePath -CurrentOuIndex $state.CurrentOuIndex -ProcessedDistinguishedNames @($processedDistinguishedNames) -FailedDistinguishedNames @($failedDistinguishedNames)
+Write-Log -Message "Run finished. Added $added computer(s) from $($entries.Count) OU/group pair(s)." -LogPath $LogPath
 
-Write-Log -Message "Run finished. Added $added computer(s). OU progress: index $($state.CurrentOuIndex) of $($entries.Count)." -LogPath $LogPath
-
-if ($state.CurrentOuIndex -ge $entries.Count) {
-    Write-Log -Message 'All OUs in the list are now complete.' -LogPath $LogPath
+if (-not $stoppedEarly) {
+    Write-Log -Message 'Rollout complete: every computer in every listed OU is already a member of its target group.' -LogPath $LogPath
 }
